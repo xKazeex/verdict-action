@@ -1,0 +1,4 @@
+critical_paths:
+  - "src/**"
+risk_triggers:
+  - pattern: "eval\\("

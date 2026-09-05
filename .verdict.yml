@@ -1,0 +1,18 @@
+# Verdict's own config, reviewing changes to Verdict itself. This is an EXAMPLE config
+# for a Node.js/GitHub-Actions project -- consuming repos write their own critical_paths
+# and risk_triggers; Verdict never infers them.
+
+critical_paths:
+  - "src/**"
+  - "action.yml"
+  - "rules/**"
+
+risk_triggers:
+  - pattern: "child_process"
+    reason: "spawns a subprocess -- confirm no unsanitized input reaches the command"
+  - pattern: "eval\\("
+    reason: "dynamic code execution"
+  - pattern: "process\\.env\\.[A-Z_]*(KEY|TOKEN|SECRET)"
+    reason: "touches a credential-shaped environment variable"
+  - pattern: "\"dependencies\"|\"devDependencies\""
+    reason: "package.json dependency change -- new supply-chain surface"

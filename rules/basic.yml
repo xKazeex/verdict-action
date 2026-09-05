@@ -1,0 +1,60 @@
+rules:
+  - id: js-eval-use
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      eval() executes a runtime string as code. If any part of the argument is influenced
+      by external input, this is arbitrary code execution.
+    patterns:
+      - pattern: eval(...)
+
+  - id: js-child-process-exec-with-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      A shell command built via string concatenation/interpolation passed to a
+      child_process exec-family function is a command-injection risk if any part of it
+      comes from external input. Prefer execFile/spawn with an argument array.
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec(`...${$X}...`, ...)
+          - pattern: child_process.exec($A + $B, ...)
+          - pattern: exec(`...${$X}...`, ...)
+
+  - id: js-child-process-exec-dynamic-command
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      exec()/execSync() run their first argument through a shell. This flags every call
+      with a non-literal command string, including ones built earlier (e.g. via
+      concatenation on a prior line) that js-child-process-exec-with-concat's inline-only
+      pattern won't catch -- confirm the command has no attacker-influenced content, or
+      switch to execFile/spawn with an argument array.
+    patterns:
+      - pattern-either:
+          - pattern: child_process.exec($CMD, ...)
+          - pattern: child_process.execSync($CMD, ...)
+      - metavariable-pattern:
+          metavariable: $CMD
+          patterns:
+            - pattern-not: "\"...\""
+            - pattern-not: "'...'"
+
+  - id: js-new-function-constructor
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: >-
+      The Function constructor compiles a runtime string as code, equivalent to eval()
+      for injection purposes.
+    patterns:
+      - pattern: new Function(...)
+
+  - id: js-insecure-random-for-security
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: >-
+      Math.random() is not cryptographically secure. If this value is used for a token,
+      nonce, key, or anything else with a security property, use crypto.randomBytes /
+      crypto.randomUUID instead.
+    patterns:
+      - pattern: Math.random()

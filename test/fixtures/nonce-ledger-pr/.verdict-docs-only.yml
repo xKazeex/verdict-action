@@ -1,0 +1,4 @@
+critical_paths:
+  - "docs/**"
+risk_triggers:
+  - pattern: "THIS_PATTERN_SHOULD_NEVER_MATCH_ANYTHING_IN_THE_REAL_DIFF_0x9f3c"

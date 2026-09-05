@@ -1,0 +1,6 @@
+node_modules/
+*.log
+verdict-results.sarif
+.env
+.env.*
+!.env.example

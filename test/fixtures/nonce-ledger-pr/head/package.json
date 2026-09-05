@@ -1,0 +1,30 @@
+{
+  "name": "base-api-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Testnet-only Kitchen service foundation for the x402 market",
+  "main": "src/server.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
+    "test:instrumentation": "node --test test/lifecycle.test.js",
+    "check": "node --check src/config.js && node --check src/lifecycle.js && node --check src/payment.js && node --check src/instrument.js && node --check src/app.js && node --check src/server.js"
+  },
+  "dependencies": {
+    "@sentry/node": "10.70.0",
+    "@x402/core": "2.22.0",
+    "@x402/evm": "2.22.0",
+    "@x402/express": "2.22.0",
+    "better-sqlite3": "^13.0.3",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.6.2"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.4"
+  },
+  "license": "ISC"
+}

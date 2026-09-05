@@ -1,0 +1,6 @@
+{
+  "description": "Real nonce-ledger diff from xKazeex/base-api-gateway, branch audit/x402-hardening, commits 06885f7..d29dabb (Add nonce-ledger replay/idempotency guard, wording correction, DUPLICATE lifecycle event). Stored as plain base/ and head/ file snapshots -- test/helpers/build-fixture-repo.js turns these into a real, freshly-committed git repo at test time, so buildSnapshot() runs actual git diff/git show against it, same as production. SHAs are NOT hardoded here: a freshly created commit's SHA depends on its timestamp, so they're read back from the rebuilt repo each run rather than baked in.",
+  "sourceRepo": "xKazeex/base-api-gateway",
+  "sourceBranch": "audit/x402-hardening",
+  "sourceCommitRange": "06885f7..d29dabb"
+}
