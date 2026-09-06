@@ -5,6 +5,8 @@ const path = require('node:path');
 const yaml = require('js-yaml');
 const { minimatch } = require('minimatch');
 
+// Matches action.yml's config-path default -- kept in sync manually since action.yml
+// (consumed by the Actions runtime) and this file (consumed by Node) can't share a constant.
 const DEFAULT_CONFIG_PATH = '.verdict.yml';
 
 /**
