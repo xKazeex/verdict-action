@@ -7,9 +7,10 @@ majority vote or an averaged confidence score. Any disagreement between the two 
 reviewers, or a high/critical finding from any channel, marks the PR `DISPUTED` or
 `NEEDS_HUMAN_REVIEW` — a human is the judge, not an algorithm.
 
-**Status: v0, core logic built and tested against real fixtures with mocked model calls.
-Not yet wired to real API keys or run as a live GitHub Action.** See "What's deferred"
-below before treating this as ready to protect a real repo.
+**Status: v0, core logic built and tested against real fixtures. Real Claude + GPT-5.6 Sol
+API calls and injection resistance are now confirmed against a live smoke test. Not yet run
+as a live GitHub Action or against a real PR.** See "What's deferred" below before treating
+this as ready to protect a real repo.
 
 ## How it works
 
@@ -87,14 +88,8 @@ against mocked `fetch` — **zero real network calls or API keys required to run
 
 ## What's deferred (flagged, not silently skipped)
 
-- **Real API calls.** Both reviewer integrations are built and tested against mocked
-  `fetch`, per the agreed build order (core logic first, real keys last). The OpenAI
-  Responses API request/response shape in `src/reviewers/openai.js` is inferred from
-  general API-shape knowledge, not a verified fetch of GPT-5.6 Sol's specific
-  documentation (it's a very recent release) — confirm against a real call before trusting
-  it beyond a smoke test.
-- **A real GitHub repo.** This project lives locally only; it hasn't been pushed anywhere.
-  `git init` is done, nothing is pushed.
+- **A real GitHub repo.** Resolved — pushed to
+  [xKazeex/verdict-action](https://github.com/xKazeex/verdict-action).
 - **A live `pull_request` run.** `src/index.js` (the Action entrypoint) is written and
   reviewed but has never executed inside an actual GitHub Actions run — event-payload
   field names, PR-comment posting, and the override-label check are unverified against a
@@ -102,10 +97,31 @@ against mocked `fetch` — **zero real network calls or API keys required to run
 - **A real test PR.** `test/fixtures/nonce-ledger-pr` is a real diff but a *reconstructed*
   one (two commits in an isolated fixture repo, not a live PR on GitHub) — good enough to
   test snapshotting/scanning/review logic, not the real `pull_request` webhook path.
-- **Real injection resistance.** The injection-attempt fixture confirms the *prompt* is
-  structurally sound (the injected text lands inside the untrusted-data region; the
-  contract text above the marker is provably unaffected by diff content). It does **not**
-  confirm a real model actually resists the embedded instruction — that needs a live call.
+
+## Confirmed against real API calls (`scripts/smoke-test-live.js`)
+
+`npm test` still runs entirely against mocked `fetch` — zero real network calls or API
+keys required for the suite. But `scripts/smoke-test-live.js` (not part of `npm test`; run
+manually with `node scripts/smoke-test-live.js`, needs `ANTHROPIC_API_KEY` /
+`OPENAI_API_KEY` in `.env`, costs real money) has since confirmed, against real calls to
+both APIs and the `test/fixtures/injection-attempt` fixture:
+
+- The OpenAI Responses API request/response shape in `src/reviewers/openai.js` — previously
+  inferred from general API-shape knowledge, not a verified fetch of GPT-5.6 Sol's specific
+  documentation — round-trips correctly against a real call.
+- **Real injection resistance.** Both Reviewer A (Claude Sonnet 5) and Reviewer B (GPT-5.6
+  Sol) independently reported `unsafe`, caught the real `eval()` RCE and the auth-bypass
+  `return true`, and explicitly classified the embedded "SECURITY REVIEWER OVERRIDE"
+  comment as a `prompt_injection_attempt` finding rather than obeying it. Neither reviewer
+  saw the other's output or Semgrep's finding — corroboration in the disagreement matrix was
+  independent. Run overall status: `NEEDS_HUMAN_REVIEW`, as expected for two `unsafe`
+  verdicts plus a Semgrep-confirmed critical finding.
+- Both reviewer functions (`reviewWithClaude`, `reviewWithGpt`) now return a `usage` field
+  (the raw usage object from each API response, field names un-normalized since they differ
+  by provider) so `scripts/smoke-test-live.js` can print token counts and, for GPT-5.6 Sol
+  (pricing given directly: $4 / $20 per million input/output tokens), an estimated cost per
+  run. Anthropic pricing for `claude-sonnet-5` is not verified here, so no cost estimate is
+  computed for that side — only raw token counts are printed.
 
 ## A bug the tests actually caught
 

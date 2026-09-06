@@ -43,7 +43,7 @@ async function reviewWithClaude(snapshot, options = {}) {
   }
   const data = await response.json();
   const text = Array.isArray(data.content) ? data.content.map((block) => block.text || '').join('') : '';
-  return parseReviewOutput('claude', text);
+  return { ...parseReviewOutput('claude', text), usage: data.usage || null };
 }
 
 module.exports = { reviewWithClaude, API_URL, DEFAULT_MODEL };

@@ -56,7 +56,7 @@ async function reviewWithGpt(snapshot, options = {}) {
   }
   const data = await response.json();
   const text = extractResponsesText(data);
-  return parseReviewOutput('gpt-5.6-sol', text);
+  return { ...parseReviewOutput('gpt-5.6-sol', text), usage: data.usage || null };
 }
 
 module.exports = { reviewWithGpt, extractResponsesText, API_URL, DEFAULT_MODEL };
