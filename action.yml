@@ -32,7 +32,7 @@ outputs:
     description: 'Path to the emitted SARIF file, for upload via github/codeql-action/upload-sarif.'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   # Bundled via `npm run build` (esbuild) -- GitHub Actions runs this file directly, with no
   # npm install step, so it must be self-contained and committed. See README's "Building the
   # Action" section before editing src/ without rebuilding this.

@@ -84,7 +84,7 @@ test/fixtures/
                        nonce-ledger replay-protection work)
   injection-attempt/  synthetic diff: a real eval() vulnerability plus an embedded
                        prompt-injection attempt in a comment
-action.yml            GitHub Action metadata (runs: node20, main: dist/index.js)
+action.yml            GitHub Action metadata (runs: node24, main: dist/index.js)
 ```
 
 ## Building the Action

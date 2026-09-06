@@ -11,7 +11,7 @@
     "start": "node src/index.js",
     "test": "node scripts/run-tests.js",
     "check": "node --check src/index.js && node --check src/config.js && node --check src/snapshot.js && node --check src/secret-scan.js && node --check src/semgrep.js && node --check src/combine.js && node --check src/report.js && node --check src/verdict.js",
-    "build": "esbuild src/index.js --bundle --platform=node --target=node20 --outfile=dist/index.js"
+    "build": "esbuild src/index.js --bundle --platform=node --target=node24 --outfile=dist/index.js"
   },
   "license": "ISC",
   "dependencies": {
