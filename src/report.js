@@ -18,11 +18,16 @@ function sarifLevel(severity) {
   }
 }
 
+function reviewerCell(review) {
+  if (review.unavailable) return 'unavailable ⚠️';
+  return `${review.overallVerdict}${review.parseError ? ' ⚠️ (parse error)' : ''}`;
+}
+
 /**
  * Renders the PR comment. Each channel's verdict is shown on its own row -- this format
  * has no code path that can collapse three independent opinions into "2 of 3 say safe."
  */
-function renderMarkdownReport({ snapshot, status, semgrepFindings, claudeReview, gptReview, disagreementMatrix }) {
+function renderMarkdownReport({ snapshot, status, semgrepFindings, semgrepError, claudeReview, gptReview, disagreementMatrix }) {
   const lines = [];
   lines.push(`## Verdict security review — status: \`${status}\``);
   lines.push('');
@@ -30,14 +35,27 @@ function renderMarkdownReport({ snapshot, status, semgrepFindings, claudeReview,
     `Snapshot: base \`${snapshot.baseSha.slice(0, 12)}\` → head \`${snapshot.headSha.slice(0, 12)}\`, diff sha256 \`${snapshot.diffSha256.slice(0, 16)}…\``
   );
   lines.push('');
+
+  if (semgrepError || claudeReview.unavailable || gptReview.unavailable) {
+    lines.push('> ⚠️ **Degraded mode: not every evidence channel produced a result.** A missing');
+    lines.push('> channel is never treated as "that channel says safe" -- this forces human review');
+    lines.push('> below regardless of what the remaining channel(s) reported.');
+    lines.push('');
+  }
+
   lines.push('### Channel verdicts (shown separately, never combined)');
   lines.push('');
   lines.push('| Channel | Verdict | Findings |');
   lines.push('|---|---|---|');
-  lines.push(`| Semgrep (deterministic) | — | ${semgrepFindings.length} |`);
-  lines.push(`| Claude (Sonnet 5) | ${claudeReview.overallVerdict}${claudeReview.parseError ? ' ⚠️ (parse error)' : ''} | ${claudeReview.findings.length} |`);
-  lines.push(`| GPT-5.6 Sol | ${gptReview.overallVerdict}${gptReview.parseError ? ' ⚠️ (parse error)' : ''} | ${gptReview.findings.length} |`);
+  lines.push(`| Semgrep (deterministic) | ${semgrepError ? 'unavailable ⚠️' : '—'} | ${semgrepFindings.length} |`);
+  lines.push(`| Claude (Sonnet 5) | ${reviewerCell(claudeReview)} | ${claudeReview.findings.length} |`);
+  lines.push(`| GPT-5.6 Sol | ${reviewerCell(gptReview)} | ${gptReview.findings.length} |`);
   lines.push('');
+
+  if (semgrepError) lines.push(`- ⚠️ Semgrep unavailable: ${semgrepError}`);
+  if (claudeReview.unavailable) lines.push(`- ⚠️ Claude (Sonnet 5) ${claudeReview.summary}`);
+  if (gptReview.unavailable) lines.push(`- ⚠️ GPT-5.6 Sol ${gptReview.summary}`);
+  if (semgrepError || claudeReview.unavailable || gptReview.unavailable) lines.push('');
 
   if (disagreementMatrix.length > 0) {
     lines.push('### Findings by location');

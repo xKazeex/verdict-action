@@ -137,6 +137,59 @@ test('a diff containing a likely secret is BLOCKED before either model is ever c
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('if one reviewer throws (timeout/API error/malformed response), the run degrades gracefully to NEEDS_HUMAN_REVIEW with a clear message instead of crashing or dropping the other reviewer\'s result', async () => {
+  const result = await runVerdict({
+    repoRoot: nonceLedgerFixture.repoRoot,
+    baseSha: nonceLedgerFixture.baseSha,
+    headSha: nonceLedgerFixture.headSha,
+    reviewers: {
+      claude: safeReviewer('claude'),
+      gpt: async () => { throw new Error('GPT-5.6 Sol API error 503: upstream overloaded'); }
+    },
+    semgrepRunner: noopSemgrep()
+  });
+  assert.equal(result.outcome, 'NEEDS_HUMAN_REVIEW');
+  assert.equal(result.gptReview.unavailable, true);
+  assert.match(result.gptReview.summary, /GPT-5\.6 Sol API error 503/);
+  assert.equal(result.claudeReview.overallVerdict, 'safe', 'the healthy reviewer\'s real result must still be used, not discarded');
+  assert.match(result.markdown, /GPT-5\.6 Sol \| unavailable/);
+  assert.doesNotMatch(result.markdown, /at Object\.|node_modules|\.js:\d+:\d+/, 'no raw stack trace should ever reach the PR comment');
+});
+
+test('if Semgrep itself fails (missing binary, malformed output), the run degrades to NEEDS_HUMAN_REVIEW rather than crashing, and both reviewers still run', async () => {
+  const result = await runVerdict({
+    repoRoot: nonceLedgerFixture.repoRoot,
+    baseSha: nonceLedgerFixture.baseSha,
+    headSha: nonceLedgerFixture.headSha,
+    reviewers: { claude: safeReviewer('claude'), gpt: safeReviewer('gpt-5.6-sol') },
+    semgrepRunner: async () => { throw new Error('semgrep: command not found'); }
+  });
+  assert.equal(result.outcome, 'NEEDS_HUMAN_REVIEW');
+  assert.equal(result.semgrepError, 'semgrep: command not found');
+  assert.deepEqual(result.semgrepFindings, []);
+  assert.match(result.markdown, /Semgrep \(deterministic\) \| unavailable/);
+});
+
+test('if secret-scanning itself throws, the run fails closed (SECRET_SCAN_FAILED) before either reviewer is ever called', async () => {
+  let claudeCalled = false;
+  let gptCalled = false;
+  const result = await runVerdict({
+    repoRoot: nonceLedgerFixture.repoRoot,
+    baseSha: nonceLedgerFixture.baseSha,
+    headSha: nonceLedgerFixture.headSha,
+    reviewers: {
+      claude: async () => { claudeCalled = true; return safeReviewer('claude')(); },
+      gpt: async () => { gptCalled = true; return safeReviewer('gpt-5.6-sol')(); }
+    },
+    semgrepRunner: noopSemgrep(),
+    secretScanner: () => { throw new Error('secret-scan: corrupted pattern table'); }
+  });
+  assert.equal(result.outcome, 'SECRET_SCAN_FAILED');
+  assert.equal(claudeCalled, false);
+  assert.equal(gptCalled, false);
+  assert.match(result.message, /corrupted pattern table/);
+});
+
 test('the injection-attempt fixture: even with a mocked reviewer that "falls for it," the pipeline still surfaces the real vulnerability via Semgrep, and status is not silently PASS', async () => {
   // This does not test real model resistance to the injection (needs a live API call --
   // see the fixture's caveat). It tests that even a WORST-CASE compromised reviewer output

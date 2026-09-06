@@ -75,10 +75,13 @@ function buildDisagreementMatrix(channelFindings) {
  * Never resolves disagreement into a majority vote or an averaged confidence -- that's a
  * hard requirement, not a preference. DISPUTED if the two model reviewers reach different
  * overall_verdicts. NEEDS_HUMAN_REVIEW if either reviewer says "unsafe" (even if they
- * agree) or any clustered finding is high/critical severity from any channel. Otherwise
- * PASS. A human is always the judge for anything other than a clean PASS.
+ * agree), any clustered finding is high/critical severity from any channel, or any channel
+ * (semgrep/claude/gpt) failed to produce a result at all -- missing evidence is never
+ * treated as "that channel says safe." Otherwise PASS. A human is always the judge for
+ * anything other than a clean PASS.
  */
-function determineStatus({ claudeVerdict, gptVerdict, disagreementMatrix }) {
+function determineStatus({ claudeVerdict, gptVerdict, disagreementMatrix, channelFailures = [] }) {
+  if (channelFailures.length > 0) return 'NEEDS_HUMAN_REVIEW';
   const anyHighOrCritical = disagreementMatrix.some((cluster) =>
     cluster.findings.some((f) => f.severity === 'high' || f.severity === 'critical')
   );

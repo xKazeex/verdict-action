@@ -12,6 +12,17 @@ function git(args, cwd) {
   return execFileSync('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 });
 }
 
+// execFileSync inherits the child's stderr to the parent by default, even when the caller
+// catches the resulting error -- so a routinely-expected failure (a context file simply not
+// being committed, which the catch block below handles correctly) would still print a raw
+// "fatal: ..." line straight into the Action's log, looking like a crash when nothing
+// actually went wrong. Used only for the context-file lookup below, where "doesn't exist at
+// this SHA" is an expected outcome, not the main diff/name-status calls where a git failure
+// would mean something genuinely wrong with baseSha/headSha and should stay loud.
+function gitQuiet(args, cwd) {
+  return execFileSync('git', args, { cwd, maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
 /**
  * Builds an immutable snapshot of a PR's diff between two fixed commits. Everything
  * downstream (secret scan, Semgrep, both reviewers, the disagreement matcher, the report)
@@ -39,7 +50,7 @@ function buildSnapshot({ repoRoot, baseSha, headSha, contextFiles = [] }) {
   const contextFileHashes = {};
   for (const relPath of contextFiles) {
     try {
-      const content = git(['show', `${headSha}:${relPath}`], repoRoot);
+      const content = gitQuiet(['show', `${headSha}:${relPath}`], repoRoot);
       contextFileHashes[relPath] = sha256(content);
     } catch {
       // File doesn't exist at headSha -- recorded as null, not silently omitted, so a

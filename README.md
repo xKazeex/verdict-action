@@ -46,6 +46,13 @@ this as ready to protect a real repo.
    override label after actually reviewing — never automatic.
 9. **BYOK**: `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` come from the consuming repo's own
    GitHub Secrets. Verdict never proxies or custodies keys or source code centrally.
+10. **Degraded-mode failure handling.** Secret-scanning failing outright is a hard gate
+    (`SECRET_SCAN_FAILED`, fails closed, no diff is ever sent to a model). Semgrep or either
+    reviewer failing independently (timeout, API error, malformed response) does not crash
+    the run or drop the other channels' real results — the failed channel is reported as
+    `unavailable` with the underlying reason, and a missing channel is never treated as
+    "that channel says safe": it always forces `NEEDS_HUMAN_REVIEW`, same as a genuine
+    disagreement or a high/critical finding. No raw stack trace ever reaches the PR comment.
 
 ## Repo layout
 
@@ -64,16 +71,38 @@ src/
     claude.js                 Reviewer A -- stateless Anthropic Messages API call
     openai.js                  Reviewer B -- stateless OpenAI Responses API call
   index.js             GitHub Action entrypoint (pull_request context -> runVerdict() -> PR comment + check status)
+dist/index.js        bundled entrypoint actually run by the Action (see "Building the Action" below) -- committed, not built by GitHub
 rules/basic.yml       bundled local Semgrep ruleset (not --config auto, deliberately -- see below)
-test/                 65 tests, node:test, zero real network calls
+scripts/
+  run-tests.js            cross-platform test runner (see "Running the tests")
+  smoke-test-live.js      manual, real-API-cost smoke test -- not part of npm test
+.github/workflows/verdict.yml   self-test workflow: runs this Action against its own PRs
+test/                 70 tests, node:test, zero real network calls
 test/fixtures/
   nonce-ledger-pr/     a REAL diff, reconstructed as its own tiny git repo, from
                        xKazeex/base-api-gateway commits 06885f7..d29dabb (the actual
                        nonce-ledger replay-protection work)
   injection-attempt/  synthetic diff: a real eval() vulnerability plus an embedded
                        prompt-injection attempt in a comment
-action.yml            GitHub Action metadata (runs: node20)
+action.yml            GitHub Action metadata (runs: node20, main: dist/index.js)
 ```
+
+## Building the Action
+
+`action.yml`'s `main` points at `dist/index.js`, a single bundled file (esbuild) with all
+runtime dependencies inlined -- `@actions/core` and `@actions/github` currently ship as
+ESM-only packages (no `require` condition in their `package.json` `exports` map), so
+`src/index.js` loads them via dynamic `import()` rather than `require()`; everything else in
+this project stays CommonJS. `uses: ./`-style Action invocation just executes this file
+directly -- it does **not** run `npm install` first, so `dist/index.js` must be committed,
+not gitignored.
+
+```
+npm run build
+```
+
+Rebuild and commit `dist/index.js` whenever `src/` changes, before merging or tagging a
+release. Nothing in CI does this for you.
 
 ## Running the tests
 

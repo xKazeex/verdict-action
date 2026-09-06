@@ -2,18 +2,9 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const core = require('@actions/core');
-const github = require('@actions/github');
 const { runVerdict } = require('./verdict');
 
-// NOTE: this entrypoint has not yet been exercised against a real GitHub Actions run --
-// per the build sequencing agreed for v0, core logic (config/snapshot/secret-scan/semgrep/
-// combine/report) was built and tested first against mocked reviewers; this file wires
-// that logic to real GitHub Actions context and has only been reviewed, not run live.
-// Confirm event-payload field names and the override-label check against a real
-// pull_request run before trusting this beyond a first smoke test.
-
-async function main() {
+async function main(core, github) {
   const anthropicApiKey = core.getInput('anthropic-api-key', { required: true });
   const openaiApiKey = core.getInput('openai-api-key', { required: true });
   const githubToken = core.getInput('github-token', { required: true });
@@ -49,9 +40,9 @@ async function main() {
     return;
   }
 
-  if (result.outcome === 'BLOCKED_SECRETS_DETECTED') {
+  if (result.outcome === 'BLOCKED_SECRETS_DETECTED' || result.outcome === 'SECRET_SCAN_FAILED') {
     core.setFailed(result.message);
-    await postComment(githubToken, pr, `## Verdict — status: \`BLOCKED_SECRETS_DETECTED\`\n\n${result.message}`);
+    await postComment(github, githubToken, pr, `## Verdict — status: \`${result.outcome}\`\n\n${result.message}`);
     return;
   }
 
@@ -59,7 +50,7 @@ async function main() {
   fs.writeFileSync(sarifPath, JSON.stringify(result.sarif, null, 2));
   core.setOutput('sarif-path', sarifPath);
 
-  await postComment(githubToken, pr, result.markdown);
+  await postComment(github, githubToken, pr, result.markdown);
 
   const hasOverride = Array.isArray(pr.labels) && pr.labels.some((l) => l.name === overrideLabel);
   if (result.status !== 'PASS' && !hasOverride) {
@@ -71,12 +62,25 @@ async function main() {
   }
 }
 
-async function postComment(token, pr, body) {
+async function postComment(github, token, pr, body) {
   const octokit = github.getOctokit(token);
   const { owner, repo } = github.context.repo;
   await octokit.rest.issues.createComment({ owner, repo, issue_number: pr.number, body });
 }
 
-main().catch((err) => {
-  core.setFailed(err instanceof Error ? err.message : String(err));
-});
+async function run() {
+  // Dynamic import(), not require(): @actions/core and @actions/github ship ESM-only (no
+  // "require" condition in their package.json "exports" map as of @actions/core@3.0.1 /
+  // @actions/github@9.1.1), discovered when the first real bundling/live-run attempt
+  // failed on this. import() uses ESM resolution and works fine from an async function --
+  // no need to convert the rest of this (well-tested) CommonJS codebase to ESM for it.
+  const core = await import('@actions/core');
+  const github = await import('@actions/github');
+  try {
+    await main(core, github);
+  } catch (err) {
+    core.setFailed(err instanceof Error ? err.message : String(err));
+  }
+}
+
+run();

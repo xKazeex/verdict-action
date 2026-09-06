@@ -100,6 +100,21 @@ test('determineStatus is PASS only when both agree, neither says unsafe, and not
   assert.equal(status, 'PASS');
 });
 
+test('determineStatus is NEEDS_HUMAN_REVIEW when a channel failed outright, even if both remaining reviewers agree and say "safe"', () => {
+  const status = determineStatus({
+    claudeVerdict: 'safe',
+    gptVerdict: 'safe',
+    disagreementMatrix: [],
+    channelFailures: ['gpt-5.6-sol']
+  });
+  assert.equal(status, 'NEEDS_HUMAN_REVIEW', 'a missing channel must never be treated as "that channel says safe"');
+});
+
+test('determineStatus defaults channelFailures to empty -- callers that predate this option are unaffected', () => {
+  const status = determineStatus({ claudeVerdict: 'safe', gptVerdict: 'safe', disagreementMatrix: [] });
+  assert.equal(status, 'PASS');
+});
+
 test('determineStatus never averages or majority-votes -- DISPUTED wins even with only one dissenting low-severity opinion', () => {
   // Regression test for the hard requirement: two "safe"-leaning signals and one
   // disagreement must still surface as DISPUTED, never resolved by outnumbering it.

@@ -27,10 +27,13 @@ inputs:
 
 outputs:
   status:
-    description: 'One of SKIPPED, BLOCKED_SECRETS_DETECTED, PASS, DISPUTED, NEEDS_HUMAN_REVIEW.'
+    description: 'One of SKIPPED, BLOCKED_SECRETS_DETECTED, SECRET_SCAN_FAILED, PASS, DISPUTED, NEEDS_HUMAN_REVIEW.'
   sarif-path:
     description: 'Path to the emitted SARIF file, for upload via github/codeql-action/upload-sarif.'
 
 runs:
   using: 'node20'
-  main: 'src/index.js'
+  # Bundled via `npm run build` (esbuild) -- GitHub Actions runs this file directly, with no
+  # npm install step, so it must be self-contained and committed. See README's "Building the
+  # Action" section before editing src/ without rebuilding this.
+  main: 'dist/index.js'
