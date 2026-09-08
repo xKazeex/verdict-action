@@ -162,3 +162,7 @@ always false. Caught by `test/verdict.test.js`'s injection-attempt case, which r
 real (unmocked) Semgrep against a real `eval()` vulnerability specifically to prove the
 defense-in-depth property (Semgrep alone must be able to block a false `PASS` even if both
 model reviewers are compromised) holds — not just assumed it did.
+
+## License
+
+[MIT](LICENSE)
