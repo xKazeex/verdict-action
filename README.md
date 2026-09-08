@@ -7,10 +7,11 @@ majority vote or an averaged confidence score. Any disagreement between the two 
 reviewers, or a high/critical finding from any channel, marks the PR `DISPUTED` or
 `NEEDS_HUMAN_REVIEW` — a human is the judge, not an algorithm.
 
-**Status: v0, core logic built and tested against real fixtures. Real Claude + GPT-5.6 Sol
-API calls and injection resistance are now confirmed against a live smoke test. Not yet run
-as a live GitHub Action or against a real PR.** See "What's deferred" below before treating
-this as ready to protect a real repo.
+**Status: v0. Core logic is tested (mocked fixtures + a live smoke test against real Claude
++ GPT-5.6 Sol API calls). The full pipeline — real `pull_request` trigger, both reviewers,
+Semgrep, PR comment, and the merge gate itself — is now confirmed working on real GitHub
+Actions infrastructure via two live self-test PRs (a clean `PASS` and a blocked
+`NEEDS_HUMAN_REVIEW`).** See "What's deferred" below for what's still genuinely open.
 
 ## How it works
 
@@ -117,15 +118,28 @@ against mocked `fetch` — **zero real network calls or API keys required to run
 
 ## What's deferred (flagged, not silently skipped)
 
-- **A real GitHub repo.** Resolved — pushed to
-  [xKazeex/verdict-action](https://github.com/xKazeex/verdict-action).
-- **A live `pull_request` run.** `src/index.js` (the Action entrypoint) is written and
-  reviewed but has never executed inside an actual GitHub Actions run — event-payload
-  field names, PR-comment posting, and the override-label check are unverified against a
-  real trigger.
-- **A real test PR.** `test/fixtures/nonce-ledger-pr` is a real diff but a *reconstructed*
-  one (two commits in an isolated fixture repo, not a live PR on GitHub) — good enough to
-  test snapshotting/scanning/review logic, not the real `pull_request` webhook path.
+- **A real-world adopter.** Verdict has so far only run against its own repo
+  ([xKazeex/verdict-action](https://github.com/xKazeex/verdict-action)) via two synthetic
+  self-test PRs — see below. No other repo, including the originally-intended Kitchen
+  (`base-api-gateway`) nonce-ledger dogfooding PR, has run this yet.
+
+## Confirmed on real GitHub Actions infrastructure
+
+Two synthetic self-test PRs against this repo exercised the actual `pull_request` trigger
+end to end — not a reconstructed fixture, not a mocked test, not a manual script:
+
+- **PR #1** touched a `critical_paths` entry with a small, deliberately low-risk change.
+  The workflow fired on the real trigger, Semgrep and both reviewers ran, a PR comment was
+  posted, and the check passed cleanly (`PASS`) — confirming the golden path: real
+  event-payload parsing, real PR-comment posting via `octokit`, real check-status reporting.
+- **PR #2** introduced a real `eval()` vulnerability (reusing the injection-attempt
+  fixture's pattern). The run correctly landed on a non-`PASS` status, the check failed, and
+  merge was blocked without the override label — confirming the merge gate itself actually
+  gates, not just that the Action runs and reports.
+
+Between the two, everything this README describes — trigger, snapshot, three independent
+channels, disagreement handling, PR comment, SARIF, and the merge gate — has now run on
+real GitHub Actions infrastructure against real PRs.
 
 ## Confirmed against real API calls (`scripts/smoke-test-live.js`)
 
