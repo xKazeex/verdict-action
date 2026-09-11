@@ -1,11 +1,14 @@
 # Verdict
 
-Multi-model adversarial security review, as a GitHub Action. Two independent LLM reviewers
-(Claude Sonnet 5 and GPT-5.6 Sol) plus Semgrep run against the same immutable PR snapshot,
-in isolation from each other, and the result is **never** silently collapsed into a
-majority vote or an averaged confidence score. Any disagreement between the two model
-reviewers, or a high/critical finding from any channel, marks the PR `DISPUTED` or
-`NEEDS_HUMAN_REVIEW` — a human is the judge, not an algorithm.
+A required check that blocks merge on payment/auth/agent diffs: two independent AI
+reviewers (Claude Sonnet 5 and GPT-5.6 Sol) plus a deterministic Semgrep scanner run
+against the same immutable PR snapshot, in isolation from each other, and the result is
+**never** silently collapsed into a majority vote or an averaged confidence score. Any
+disagreement between the two model reviewers, or a high/critical finding from any channel,
+marks the PR `DISPUTED` or `NEEDS_HUMAN_REVIEW` — human override only, never automatic.
+
+It grew out of dogfooding on [x402](https://github.com/xKazeex/base-api-gateway)-style
+payment infrastructure — see "What's deferred" below for that origin case study.
 
 **Status: v0. Core logic is tested (mocked fixtures + a live smoke test against real Claude
 + GPT-5.6 Sol API calls). The full pipeline — real `pull_request` trigger, both reviewers,
