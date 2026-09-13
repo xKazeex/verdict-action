@@ -5417,7 +5417,9 @@ var require_claude = __commonJS({
       }
       const data = await response.json();
       const text = Array.isArray(data.content) ? data.content.map((block) => block.text || "").join("") : "";
-      return { ...parseReviewOutput("claude", text), usage: data.usage || null };
+      const parsed = parseReviewOutput("claude", text);
+      if (parsed.parseError) throw new Error(parsed.parseError);
+      return { ...parsed, usage: data.usage || null };
     }
     module2.exports = { reviewWithClaude, API_URL, DEFAULT_MODEL };
   }
@@ -5466,7 +5468,9 @@ var require_openai = __commonJS({
       }
       const data = await response.json();
       const text = extractResponsesText(data);
-      return { ...parseReviewOutput("gpt-5.6-sol", text), usage: data.usage || null };
+      const parsed = parseReviewOutput("gpt-5.6-sol", text);
+      if (parsed.parseError) throw new Error(parsed.parseError);
+      return { ...parsed, usage: data.usage || null };
     }
     module2.exports = { reviewWithGpt, extractResponsesText, API_URL, DEFAULT_MODEL };
   }

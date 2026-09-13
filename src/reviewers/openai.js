@@ -56,7 +56,13 @@ async function reviewWithGpt(snapshot, options = {}) {
   }
   const data = await response.json();
   const text = extractResponsesText(data);
-  return { ...parseReviewOutput('gpt-5.6-sol', text), usage: data.usage || null };
+  const parsed = parseReviewOutput('gpt-5.6-sol', text);
+  // See the matching comment in reviewers/claude.js: an unparseable response must be a
+  // channel failure (thrown, routed through unavailableReview()/channelFailures), not an
+  // ordinary degraded result -- otherwise it can silently look like "reviewed, 0
+  // findings" and, depending on the other channel's verdict, produce a false PASS.
+  if (parsed.parseError) throw new Error(parsed.parseError);
+  return { ...parsed, usage: data.usage || null };
 }
 
 module.exports = { reviewWithGpt, extractResponsesText, API_URL, DEFAULT_MODEL };

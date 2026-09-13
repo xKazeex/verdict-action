@@ -4,6 +4,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { runVerdict } = require('../src/verdict');
+const { reviewWithClaude } = require('../src/reviewers/claude');
 const { buildFixtureRepo } = require('./helpers/build-fixture-repo');
 
 let nonceLedgerFixture;
@@ -154,6 +155,39 @@ test('if one reviewer throws (timeout/API error/malformed response), the run deg
   assert.equal(result.claudeReview.overallVerdict, 'safe', 'the healthy reviewer\'s real result must still be used, not discarded');
   assert.match(result.markdown, /GPT-5\.6 Sol \| unavailable/);
   assert.doesNotMatch(result.markdown, /at Object\.|node_modules|\.js:\d+:\d+/, 'no raw stack trace should ever reach the PR comment');
+});
+
+// The exact scenario the bug behind this fix would have gotten wrong: before it, a
+// reviewer's unparseable output silently defaulted to overallVerdict 'concerns' with 0
+// findings, treated as an ordinary result rather than a channel failure. Combined with a
+// clean 'safe'/0-findings result from the other channel, that could produce a false
+// PASS -- exactly the "missing channel treated as safe" failure this architecture claims
+// is impossible. This test drives the REAL reviewWithClaude (mocked fetch only, so the
+// actual parse-output.js integration is exercised, not a hand-rolled stand-in for it) to
+// confirm the fix: an unparseable response must force NEEDS_HUMAN_REVIEW even when the
+// other channel is completely clean.
+test('a reviewer returning unparseable text forces NEEDS_HUMAN_REVIEW even when the other channel returns a clean "safe" result', async () => {
+  const unparseableFetch = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ content: [{ text: 'not json at all, sorry' }] })
+  });
+  const result = await runVerdict({
+    repoRoot: nonceLedgerFixture.repoRoot,
+    baseSha: nonceLedgerFixture.baseSha,
+    headSha: nonceLedgerFixture.headSha,
+    reviewers: {
+      claude: (snapshot) => reviewWithClaude(snapshot, { apiKey: 'k', fetch: unparseableFetch }),
+      gpt: safeReviewer('gpt-5.6-sol')
+    },
+    semgrepRunner: noopSemgrep()
+  });
+  assert.equal(result.outcome, 'NEEDS_HUMAN_REVIEW');
+  assert.equal(result.claudeReview.unavailable, true, 'a parse error must be recorded as a channel failure, not an ordinary result');
+  assert.match(result.claudeReview.summary, /Could not parse claude's output as JSON/);
+  assert.equal(result.gptReview.overallVerdict, 'safe', 'the healthy channel\'s real result must still be used, not discarded');
+  assert.match(result.markdown, /Degraded mode/, 'the degraded-mode banner must render for a parse-error channel failure, same as any other');
+  assert.match(result.markdown, /Claude \(Sonnet 5\) \| unavailable/);
 });
 
 test('if Semgrep itself fails (missing binary, malformed output), the run degrades to NEEDS_HUMAN_REVIEW rather than crashing, and both reviewers still run', async () => {

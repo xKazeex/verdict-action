@@ -133,6 +133,18 @@ test('reviewWithClaude surfaces a non-ok API response as a thrown error, not a s
   );
 });
 
+test('reviewWithClaude surfaces an unparseable response as a thrown error, not a silent "concerns"', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ content: [{ text: 'not json at all, sorry' }] })
+  });
+  await assert.rejects(
+    () => reviewWithClaude(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: fetchImpl }),
+    /Could not parse claude's output as JSON/
+  );
+});
+
 test('reviewWithGpt throws a clear BYOK error if no API key is available', async () => {
   const original = process.env.OPENAI_API_KEY;
   delete process.env.OPENAI_API_KEY;
@@ -171,6 +183,18 @@ test('reviewWithGpt surfaces a non-ok API response as a thrown error, not a sile
   await assert.rejects(
     () => reviewWithGpt(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: mockFetch({ error: 'bad request' }, false, 400) }),
     /OpenAI API error 400/
+  );
+});
+
+test('reviewWithGpt surfaces an unparseable response as a thrown error, not a silent "concerns"', async () => {
+  const fetchImpl = async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ output_text: 'not json at all, sorry' })
+  });
+  await assert.rejects(
+    () => reviewWithGpt(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: fetchImpl }),
+    /Could not parse gpt-5\.6-sol's output as JSON/
   );
 });
 

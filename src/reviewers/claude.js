@@ -43,7 +43,17 @@ async function reviewWithClaude(snapshot, options = {}) {
   }
   const data = await response.json();
   const text = Array.isArray(data.content) ? data.content.map((block) => block.text || '').join('') : '';
-  return { ...parseReviewOutput('claude', text), usage: data.usage || null };
+  const parsed = parseReviewOutput('claude', text);
+  // An unparseable response is a channel failure, not a degraded-but-still-usable
+  // result: throwing here (rather than returning parsed.parseError as ordinary data)
+  // routes it through the exact same Promise.allSettled -> unavailableReview() path in
+  // verdict.js as a network/API error, so it forces channelFailures/NEEDS_HUMAN_REVIEW
+  // and the "Degraded mode" banner regardless of what the other channel reports. Before
+  // this, a parse error silently defaulted to overallVerdict 'concerns' with 0 findings
+  // -- indistinguishable in effect from a channel that reviewed and found nothing, which
+  // could coincidentally still produce a false PASS.
+  if (parsed.parseError) throw new Error(parsed.parseError);
+  return { ...parsed, usage: data.usage || null };
 }
 
 module.exports = { reviewWithClaude, API_URL, DEFAULT_MODEL };
