@@ -12,6 +12,7 @@ const { parseReviewOutput } = require('./parse-output');
 // parsing for the two response shapes this is written to handle.
 const API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MODEL = 'gpt-5.6-sol';
+const DEFAULT_TIMEOUT_MS = 60000;
 
 function extractResponsesText(data) {
   if (typeof data.output_text === 'string') return data.output_text;
@@ -39,16 +40,30 @@ async function reviewWithGpt(snapshot, options = {}) {
   }
   const fetchImpl = options.fetch || fetch;
   const model = options.model || DEFAULT_MODEL;
+  const timeoutMs = options.timeoutMs ?? (Number(process.env.REVIEWER_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
   const prompt = buildReviewPrompt(snapshot);
 
-  const response = await fetchImpl(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({ model, input: prompt })
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({ model, input: prompt }),
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`OpenAI API request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
@@ -65,4 +80,4 @@ async function reviewWithGpt(snapshot, options = {}) {
   return { ...parsed, usage: data.usage || null };
 }
 
-module.exports = { reviewWithGpt, extractResponsesText, API_URL, DEFAULT_MODEL };
+module.exports = { reviewWithGpt, extractResponsesText, API_URL, DEFAULT_MODEL, DEFAULT_TIMEOUT_MS };

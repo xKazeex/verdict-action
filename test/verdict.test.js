@@ -190,6 +190,42 @@ test('a reviewer returning unparseable text forces NEEDS_HUMAN_REVIEW even when 
   assert.match(result.markdown, /Claude \(Sonnet 5\) \| unavailable/);
 });
 
+// A stalled socket (dead connection, network congestion) must degrade the same way an
+// explicit API error does -- not hang the whole run indefinitely. This drives the REAL
+// reviewWithClaude with a fetch that never resolves on its own, so the abort/timeout wiring
+// added to claude.js is what actually produces the failure here, not a hand-rolled stand-in
+// for it.
+test('a reviewer whose request stalls past the configured timeout is aborted and reported as an unavailable channel, forcing NEEDS_HUMAN_REVIEW', async () => {
+  const neverResolvingFetch = (url, init) =>
+    new Promise((resolve, reject) => {
+      if (init && init.signal) {
+        init.signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }
+    });
+  const start = Date.now();
+  const result = await runVerdict({
+    repoRoot: nonceLedgerFixture.repoRoot,
+    baseSha: nonceLedgerFixture.baseSha,
+    headSha: nonceLedgerFixture.headSha,
+    reviewers: {
+      claude: (snapshot) => reviewWithClaude(snapshot, { apiKey: 'k', fetch: neverResolvingFetch, timeoutMs: 30 }),
+      gpt: safeReviewer('gpt-5.6-sol')
+    },
+    semgrepRunner: noopSemgrep()
+  });
+  assert.ok(Date.now() - start < 2000, 'the stalled channel must not be allowed to hang the whole run out to the old hardcoded 60s');
+  assert.equal(result.outcome, 'NEEDS_HUMAN_REVIEW');
+  assert.equal(result.claudeReview.unavailable, true, 'a timeout must be recorded as a channel failure, not an ordinary result');
+  assert.match(result.claudeReview.summary, /timed out after 30ms/);
+  assert.equal(result.gptReview.overallVerdict, 'safe', 'the healthy channel\'s real result must still be used, not discarded');
+  assert.match(result.markdown, /Degraded mode/, 'the degraded-mode banner must render for a timeout channel failure, same as any other');
+  assert.match(result.markdown, /Claude \(Sonnet 5\) \| unavailable/);
+});
+
 test('if Semgrep itself fails (missing binary, malformed output), the run degrades to NEEDS_HUMAN_REVIEW rather than crashing, and both reviewers still run', async () => {
   const result = await runVerdict({
     repoRoot: nonceLedgerFixture.repoRoot,

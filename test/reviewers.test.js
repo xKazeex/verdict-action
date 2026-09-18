@@ -29,6 +29,23 @@ function mockFetch(bodyObj, ok = true, status = 200) {
   });
 }
 
+// Mimics real fetch's behavior under AbortController: never settles on its own, but
+// rejects with a DOMException-shaped AbortError the instant the passed-in signal fires --
+// same contract undici/native fetch honors, so this exercises the reviewer's own
+// setTimeout/abort/catch wiring rather than any behavior specific to a mocked fetch.
+function neverResolvingFetch() {
+  return (url, init) =>
+    new Promise((resolve, reject) => {
+      if (init && init.signal) {
+        init.signal.addEventListener('abort', () => {
+          const err = new Error('The operation was aborted');
+          err.name = 'AbortError';
+          reject(err);
+        });
+      }
+    });
+}
+
 // --- prompt / instruction-boundary structural tests -----------------------------------
 
 test('buildReviewPrompt places the diff strictly after the BEGIN UNTRUSTED DIFF marker, contract text unmodified', () => {
@@ -143,6 +160,27 @@ test('reviewWithClaude surfaces an unparseable response as a thrown error, not a
     () => reviewWithClaude(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: fetchImpl }),
     /Could not parse claude's output as JSON/
   );
+});
+
+test('reviewWithClaude aborts a stalled request at the configured timeout and throws a clear timeout error', async () => {
+  const start = Date.now();
+  await assert.rejects(
+    () => reviewWithClaude(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: neverResolvingFetch(), timeoutMs: 30 }),
+    /Claude API request timed out after 30ms/
+  );
+  // Confirms the abort actually fires around the configured threshold rather than the
+  // request just happening to reject some other way -- guards against a change that makes
+  // the timeout a no-op (e.g. a controller never wired to the fetch call's signal).
+  assert.ok(Date.now() - start < 2000, 'must not fall back to waiting out the old hardcoded 60s default');
+});
+
+test('reviewWithGpt aborts a stalled request at the configured timeout and throws a clear timeout error', async () => {
+  const start = Date.now();
+  await assert.rejects(
+    () => reviewWithGpt(fakeSnapshotWithDiff('x'), { apiKey: 'k', fetch: neverResolvingFetch(), timeoutMs: 30 }),
+    /OpenAI API request timed out after 30ms/
+  );
+  assert.ok(Date.now() - start < 2000, 'must not fall back to waiting out the old hardcoded 60s default');
 });
 
 test('reviewWithGpt throws a clear BYOK error if no API key is available', async () => {

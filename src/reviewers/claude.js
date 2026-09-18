@@ -6,6 +6,7 @@ const { parseReviewOutput } = require('./parse-output');
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const DEFAULT_MODEL = 'claude-sonnet-5';
 const ANTHROPIC_VERSION = '2023-06-01';
+const DEFAULT_TIMEOUT_MS = 60000;
 
 /**
  * Reviewer A. A single stateless API call -- no thread ID, no prior messages, no
@@ -21,21 +22,35 @@ async function reviewWithClaude(snapshot, options = {}) {
   }
   const fetchImpl = options.fetch || fetch;
   const model = options.model || DEFAULT_MODEL;
+  const timeoutMs = options.timeoutMs ?? (Number(process.env.REVIEWER_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
   const prompt = buildReviewPrompt(snapshot);
 
-  const response = await fetchImpl(API_URL, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': ANTHROPIC_VERSION
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: 4096,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetchImpl(API_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': ANTHROPIC_VERSION
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 4096,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Claude API request timed out after ${timeoutMs}ms`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
@@ -56,4 +71,4 @@ async function reviewWithClaude(snapshot, options = {}) {
   return { ...parsed, usage: data.usage || null };
 }
 
-module.exports = { reviewWithClaude, API_URL, DEFAULT_MODEL };
+module.exports = { reviewWithClaude, API_URL, DEFAULT_MODEL, DEFAULT_TIMEOUT_MS };
