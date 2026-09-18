@@ -8,13 +8,15 @@ disagreement between the two model reviewers, or a high/critical finding from an
 marks the PR `DISPUTED` or `NEEDS_HUMAN_REVIEW` — human override only, never automatic.
 
 It grew out of dogfooding on [x402](https://github.com/xKazeex/base-api-gateway)-style
-payment infrastructure — see "What's deferred" below for that origin case study.
+payment infrastructure — see "Real-world dogfooding" below for that origin case study,
+including three real bugs it found and fixed before merge.
 
 **Status: v0. Core logic is tested (mocked fixtures + a live smoke test against real Claude
 + GPT-5.6 Sol API calls). The full pipeline — real `pull_request` trigger, both reviewers,
 Semgrep, PR comment, and the merge gate itself — is now confirmed working on real GitHub
 Actions infrastructure via two live self-test PRs (a clean `PASS` and a blocked
-`NEEDS_HUMAN_REVIEW`).** See "What's deferred" below for what's still genuinely open.
+`NEEDS_HUMAN_REVIEW`), plus a real third-party PR (see "Real-world dogfooding" below).** See
+"What's deferred" below for what's still genuinely open.
 
 ## How it works
 
@@ -119,12 +121,48 @@ Requires `semgrep` on `PATH` (`pip install semgrep`) for two tests; those two sk
 gracefully if it's not found. Everything else, including the reviewer API clients, runs
 against mocked `fetch` — **zero real network calls or API keys required to run the suite.**
 
+## Real-world dogfooding: Kitchen (`base-api-gateway`)
+
+This is Verdict's strongest evidence so far — not a synthetic self-test PR, but a real
+security review that changed real code before merge.
+
+[xKazeex/base-api-gateway#3](https://github.com/xKazeex/base-api-gateway/pull/3) (the x402
+resource-charge idempotency window, on Kitchen's nonce-ledger payment guard) ran Verdict for
+real. GPT-5.6 Sol caught two real high-severity bugs in the same run:
+
+1. **A lock-window conflation.** A still-in-flight (`pending`) resource lock expired on the
+   same short window as an already-settled one, so a genuinely slow (not abandoned)
+   verify/settle could be mistaken for expired and race a fresh authorization — reopening
+   the exact double-settlement risk the lock exists to prevent.
+2. **A settle-exception mishandling.** Any non-success settle outcome released the lock,
+   including one where the settle call itself errored rather than being definitively
+   rejected — treating "outcome unknown" as "definitely didn't happen" and letting a
+   fresh-nonce retry through with a real risk of double settlement.
+
+Both were fixed, with new test coverage, in
+[`f6c7540`](https://github.com/xKazeex/base-api-gateway/commit/f6c7540c13c38e42bf714be6af758368c7658d19).
+
+That same dogfooding run also surfaced a real bug in Verdict itself: a reviewer's
+unparseable output was silently treated as an ordinary "concerns, 0 findings" result
+instead of a channel failure, which could produce a false `PASS` if the other channel came
+back clean. Fixed in this repo in
+[`1ad09bf`](https://github.com/xKazeex/verdict-action/commit/1ad09bf), and Kitchen's PR
+pinned to the fix (`d650ad2`) before its own re-run.
+
+On the re-run — now protected by the parse-error fix — Verdict caught a **third** real bug:
+a resource-lock **key spoofing** issue, where `extractResourceKey()` keyed the duplicate-
+settlement lock on the client's own echoed `resource.url` instead of the server-matched
+route, letting a client dodge the lock by naming the same real endpoint differently across
+requests. Fixed, with tests proving the spoofed-URL case is now blocked, in
+[`2c719ca`](https://github.com/xKazeex/base-api-gateway/commit/2c719ca). PR #3 was
+re-verified clean and merged.
+
+Net result: three real bugs found and fixed (two in the target repo, one in Verdict's own
+parse-error handling), all before merge, none caught by manual review alone.
+
 ## What's deferred (flagged, not silently skipped)
 
-- **A real-world adopter.** Verdict has so far only run against its own repo
-  ([xKazeex/verdict-action](https://github.com/xKazeex/verdict-action)) via two synthetic
-  self-test PRs — see below. No other repo, including the originally-intended Kitchen
-  (`base-api-gateway`) nonce-ledger dogfooding PR, has run this yet.
+No other repo besides Kitchen (`base-api-gateway`) has run Verdict yet.
 
 ## Confirmed on real GitHub Actions infrastructure
 
